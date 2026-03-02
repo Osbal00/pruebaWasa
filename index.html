@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador Simple</title>
+    
+    <!-- Mapbox CSS -->
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info" id="info">📍 Esperando ubicación...</div>
+
+    <!-- Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+
+    <script>
+        // CONFIGURACIÓN
+        const firebaseConfig = {
+            apiKey: "AIzaSyBvqiKzyJPJmXIYqGK0DEDjhrmcDR7v6WQ",
+            authDomain: "mapboxosbal2.firebaseapp.com",
+            databaseURL: "https://mapboxosbal2-default-rtdb.firebaseio.com",
+            projectId: "mapboxosbal2",
+            storageBucket: "mapboxosbal2.firebasestorage.app",
+            messagingSenderId: "449947194169",
+            appId: "1:449947194169:web:a5d36ba4958f30af5d4ee8"
+        };
+
+        mapboxgl.accessToken = 'pk.eyJ1Ijoib3NiYWwwMCIsImEiOiJjbW04NGpqdzMwZGR5MnhxOWMxejJ0bWFtIn0.0Fhm6mnzcwy3I9wWcuFmLA';
+
+        // Variables
+        let map;
+        let marcador;
+        let ruta = [];
+
+        // Iniciar
+        window.addEventListener('load', () => {
+            // Inicializar Firebase
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.database();
+            
+            // Crear mapa
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [-16.5263, -68.1856],
+                zoom: 15
+            });
+
+            map.on('load', () => {
+                // Crear marcador
+                const el = document.createElement('div');
+                el.style.width = '20px';
+                el.style.height = '20px';
+                el.style.background = '#4264fb';
+                el.style.borderRadius = '50%';
+                el.style.border = '3px solid white';
+                el.style.boxShadow = '0 0 20px #4264fb';
+                
+                marcador = new mapboxgl.Marker(el)
+                    .setLngLat([-16.5263, -68.1856])
+                    .addTo(map);
+
+                // Capa para la ruta
+                map.addSource('ruta', {
+                    type: 'geojson',
+                    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+                });
+                
+                map.addLayer({
+                    id: 'ruta',
+                    type: 'line',
+                    source: 'ruta',
+                    paint: { 'line-color': '#4264fb', 'line-width': 4 }
+                });
+
+                // Escuchar Firebase
+                console.log("👂 Escuchando cambios...");
+                
+                db.ref('ubicaciones/por_fecha/2026-03-02/qDYDJoBIjFYQJ9ebgewJMYPIjOo2').on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (!data) return;
+                    
+                    // Convertir a array y ordenar
+                    const puntos = Object.values(data).sort((a,b) => a.timestamp - b.timestamp);
+                    if (puntos.length === 0) return;
+                    
+                    // Último punto
+                    const ultimo = puntos[puntos.length - 1];
+                    
+                    // Actualizar marcador
+                    marcador.setLngLat([ultimo.longitud, ultimo.latitud]);
+                    
+                    // Actualizar ruta
+                    ruta = puntos.map(p => [p.longitud, p.latitud]);
+                    map.getSource('ruta').setData({
+                        type: 'Feature',
+                        geometry: { type: 'LineString', coordinates: ruta }
+                    });
+                    
+                    // CENTRAR MAPA EN EL TELÉFONO (esto hace el seguimiento)
+                    map.flyTo({
+                        center: [ultimo.longitud, ultimo.latitud],
+                        zoom: 16,
+                        duration: 1000
+                    });
+                    
+                    // Mostrar info simple
+                    document.getElementById('info').innerHTML = 
+                        `📍 Lat: ${ultimo.latitud.toFixed(6)}<br>` +
+                        `📍 Lng: ${ultimo.longitud.toFixed(6)}`;
+                    
+                    console.log("📱 Móvil en:", ultimo.latitud, ultimo.longitud);
+                    
+                }, (error) => {
+                    console.error("Error:", error);
+                    document.getElementById('info').innerHTML = "❌ Error de conexión";
+                });
+            });
+        });
+    </script>
+</body>
+</html>
